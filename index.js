@@ -31,7 +31,7 @@ const jwtSecret = process.env.ACCESS_TOKEN_SECRET;
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const userCollection = client.db("mfsServer").collection("users");
     const loginCollection = client.db("mfsServer").collection("register");
@@ -51,36 +51,51 @@ async function run() {
 
     // JWT Middleware
 
-    const authenticateToken = (req, res, next) => {
-      const token = req.header("x-auth-token");
-      if (!token)
-        return res.status(401).json({ msg: "No token, authorization denied" });
+    // const authenticateToken = (req, res, next) => {
+    //   const token = req.header("x-auth-token");
+    //   if (!token)
+    //     return res.status(401).json({ msg: "No token, authorization denied" });
 
-      try {
-        const decoded = jwt.verify(token, jwtSecret);
-        req.user = decoded.user;
-        next();
-      } catch (err) {
-        res.status(401).json({ msg: "Token is not valid" });
-      }
-    };
+    //   try {
+    //     const decoded = jwt.verify(token, jwtSecret);
+    //     req.user = decoded.user;
+    //     next();
+    //   } catch (err) {
+    //     res.status(401).json({ msg: "Token is not valid" });
+    //   }
+    // };
+
+    app.post('/jwt', async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: '1h'
+      });
+      res.send({ token });
+    });
+
+    // middlewares
+const verifyToken = (req, res, next) => {
+  console.log('inside verify token', req.headers.authorization);
+  if (!req.headers.authorization) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  const token = req.headers.authorization.split(" ")[1];
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).send({ message: "forbidden access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+};
+
+
 
     app.get("/user", async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
     });
-    // app.post('/user', async (req, res) => {
-    //   const user = req.body;
-    //   const query = { email: user.email };
-    //   const oldUser = await userCollection.findOne(query);
-    //   if (oldUser) return res.status(400).json({ msg: 'User already exists' });
-
-    //   const salt = await bcrypt.genSalt(10);
-    //   const hashedPin = await bcrypt.hash(pin, salt);
-
-    //   await userCollection.insertOne(user);
-    //   res.status(201).send(user);
-    // })
+   
 
     app.post("/user", async (req, res) => {
       const { name, email, pin, number, status, role, balance } = req.body;
@@ -152,9 +167,7 @@ async function run() {
     app.get("/user-login/:contact", async (req, res) => {
       const { contact } = req.params; // এখানে req.params.contact থেকে contact প্রোপার্টি নেয়া হয়েছে
       try {
-        const result = await userCollection.find({
-          $or: [{ email: contact }, { number: contact }]
-        }).toArray();
+        const result = await userCollection.find({$or: [{ email: contact }, { number: contact }]}).toArray();
         res.send(result);
       } catch (error) {
         console.error("Error fetching user:", error);
@@ -187,7 +200,7 @@ async function run() {
     });
 
     // All Users
-    app.get("/all-users", async (req, res) => {
+    app.get("/all-users", verifyToken, async (req, res) => {
       try {
         const query = { role: "User", status: "Approved" };
         const result = await userCollection.find(query).toArray();
@@ -198,7 +211,7 @@ async function run() {
       }
     });
 
-    app.get("/all-users-pending", async (req, res) => {
+    app.get("/all-users-pending", verifyToken, async (req, res) => {
       try {
         const query = { role: "User", status: "Pending" };
         const result = await userCollection.find(query).toArray();
@@ -208,7 +221,7 @@ async function run() {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
-    app.get("/all-agent-pending", async (req, res) => {
+    app.get("/all-agent-pending", verifyToken, async (req, res) => {
       try {
         const query = { role: "Agent", status: "Pending" };
         const result = await userCollection.find(query).toArray();
@@ -219,7 +232,7 @@ async function run() {
       }
     });
 
-    app.get("/all-agent-pending", async (req, res) => {
+    app.get("/all-agent-pending", verifyToken,  async (req, res) => {
       try {
         const query = { role: "Agent", status: "Pending" };
         const result = await userCollection.find(query).toArray();
@@ -229,7 +242,7 @@ async function run() {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
-    app.get("/all-user-block", async (req, res) => {
+    app.get("/all-user-block", verifyToken, async (req, res) => {
       try {
         const query = { status: "Block" };
         const result = await userCollection.find(query).toArray();
@@ -241,7 +254,7 @@ async function run() {
     });
 
     // All Agents
-    app.get("/all-agents", async (req, res) => {
+    app.get("/all-agents", verifyToken, async (req, res) => {
       try {
         const query = { role: "Agent", status: "Approved" };
         const result = await userCollection.find(query).toArray();
@@ -322,7 +335,7 @@ async function run() {
       }
     });
 
-    app.get("/trans", async (req, res) => {
+    app.get("/trans", verifyToken, async (req, res) => {
       try {
         const transactions = await sendMoneyCollection.find().toArray();
         res.send(transactions);
@@ -338,7 +351,7 @@ async function run() {
       res.json(result);
     });
 
-    // app.put("/amount/:id", async (req, res) => {
+
     //   const { id } = req.params;
     //   const {balance, pin, email } = req.body;
 
@@ -452,7 +465,7 @@ async function run() {
       try {
         const result = await userCollection.updateOne(
           { _id: new ObjectId(id) }, // filter
-          { $set: { balance } } // update
+          { $set: { balance, status: 'Approved' } } // update
         );
         if (result.modifiedCount === 1) {
           res.json({ message: "User status updated successfully" });
@@ -538,11 +551,10 @@ app.get('/search-users', async (req, res) => {
     });
 
 
+
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
